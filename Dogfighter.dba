@@ -1,0 +1,642 @@
+Remstart 
+Author: Thomas Woods
+Project: 3DGame
+Created: Tuesday, November 29, 2011
+Remend
+
+`Set up the program
+if check display mode(1920,1080,32)=1 `if it can handle HD
+    set display mode 1920,1080,32 `set it to HD
+else `if it can't handle HD
+    set display mode 1024,768,32 `set it to a more common resolution
+endif
+set window off `fullscreen
+sync on `constant fame rate
+sync rate 60 `set to 60 FPS
+autocam off `do not auto adjust the camera
+set ambient light 50 `don't really want to deal with lights at this point
+color backdrop RGB(0,255,255) `if they do see this, make it the same color as the sky
+RANDOMIZE TIMER() `will seed the random numbers virtually differently everytime the program is run
+
+`main game loop
+repeat
+    if variablesInitalized=0 `One time set up at the start of the program. Would make more sense if this loops had local variables
+        
+        `Joystick, Menu, Help, Scores, Game - Inditcates what the game should be running now
+        currentScreen$="Menu"
+        
+        `joystick variables
+        `determine the total range of the joystick
+        maxX#=1 : minX#=joystick x()
+        maxY#=1 : minY#=joystick y()
+        maxZ#=1 : minZ#=joystick y()
+        
+        `Game Variables
+        currenttime#=timer() `For anything that requires timing
+        lastshot=currenttime# `Used for determining if the player can shoot yet
+        firerate=500 `the time to wait in between shots
+        bulletspeed=200 `how fast the bullet s move
+        score = 0 `the player's score
+        lives=3 `the amount of lives the player has left. 0 lives left=last life
+        alienhitat=0 `UNUSED - Determines when to flash the alien ship
+        flashtime=250 `UNUSED - Determines how long to flash the alien ship
+        lastballoonpop=0 `used for determining if the plyer has a powerup
+        powerupduration=3000 `used for determining if the player still has a powerup
+            
+        `images - using 100's because I don't want to interfere with the textures
+        menu_image=100 `image to be displayed in the menu
+        load image "title.png", menu_image
+        
+        `object variables
+        ground=1
+        sky=2
+        northwall=3
+        eastwall=4
+        southwall=5
+        westwall=6
+        player=7
+        enemy=8
+        balloon=9
+        dim bullets(50) `fifty bullets at any time
+        for i=11 to 60 `set up the object number for each bullet
+            bullets(i-10)=i `i-10 = 1 through 50
+        NEXT i
+    
+        `load the textures
+        load image "sky.png", sky
+        load image "wall.png", northwall
+        
+        `the ground
+        load OBJECT "terrain.x", ground
+        SCALE OBJECT ground, 4166, 10000, 4166
+        POSITION OBJECT ground, 25000, 250, -25000
+        set object collision to polygons ground `this sets the collision to a more precise method
+        `the sky
+        MAKE OBJECT PLANE sky, 50000, 50000
+        POSITION OBJECT sky, 0, 25000, 0
+        ROTATE OBJECT sky, 90, 0, 0
+        TEXTURE OBJECT sky, sky
+        set object light sky, 0
+        `the walls
+        make object plane northwall, 50000,25000
+        position object northwall, 0,12500, 25000
+        TEXTURE OBJECT northwall, northwall
+        make object plane eastwall, 50000,25000
+        position object eastwall, 25000,12500, 0
+        rotate object eastwall, 0,90,0
+        TEXTURE OBJECT eastwall, northwall
+        make object plane southwall, 50000,25000
+        position object southwall, 0,12500, -25000
+        TEXTURE OBJECT southwall, northwall
+        make object plane westwall, 50000,25000
+        position object westwall, -25000,12500, 0
+        rotate object westwall, 0,90,0
+        TEXTURE OBJECT westwall, northwall
+        `the player
+        MAKE OBJECT SPHERE player, 250
+        hide object player
+        `the enemy
+        load object "ufo.x", enemy
+        scale object enemy, 175,175,175
+        position object enemy, 0,5000,10000
+        point object enemy, 0,5000,0
+        set object collision to polygons enemy
+        `the balloon
+        load OBJECT "Balloon.x", balloon
+        scale object balloon, 10000,10000,10000
+        POSITION OBJECT balloon, 0, 7500, 0
+        set object collision to polygons balloon
+        `the bullets
+        for i=1 to 50 `actually uses the object numbers 11-60
+            MAKE OBJECT sphere bullets(i), 50
+            hide object bullets(i)
+            color OBJECT bullets(i), RGB(0,0,0)
+        NEXT i
+        
+        `sound
+        gunshot_sound=1
+        ufo_sound=2
+        `load the sounds
+        load 3dsound "shot.wav", gunshot_sound `3D sound so you can hear how close it is
+        load 3dsound "ufo.wav", ufo_sound
+        position listener 0,0,0
+        scale listener 7 `7 times the normal hearing range because I made the world so big
+        
+        `music
+        load music "Russian teckno.mp3", 1
+        loop music 1
+        
+        `set up the camera
+        set camera range 1,100000
+        POSITION CAMERA  0,5000,-10000
+        SET CAMERA FOV 80
+        
+        `enemy shield
+        MAKE PARTICLES 1, balloon, 25, (object size(enemy))*2
+        color particles 1, 0,128,0
+        
+        variablesInitalized=1 `make sure it doesn't run this again. Again, would make sense if this was a function or if loops had local variables
+    endif
+    
+    
+    `Main Menu of the game, allows the player to view the help, the high scores, calibrate the joystick, and start the game
+    if currentScreen$="Menu"
+        cls
+        hide mouse `hide the mouse for text only menus
+        `set up the main menu text
+        set text size 10
+        ink RGB(90,90,90),1
+        `display the main menu image
+        paste image menu_image,screen width()/2-image width(menu_image)/2,screen height()/2-image height(menu_image)/2
+        `print the main menu options
+        print "---Main Menu---"
+        print "Welcome to Thomas Woods' 3D Dogfighter"
+        print "Press 'J' to Calibrate your Joystick"
+        print "Press 'H' to View the Help Screen"
+        print "Press 'P' to Play the Game"
+        print "Press 'S' to View your High Scores"
+        print "Press Escape to Quit"
+        `if they hit specific keys, then go to associated screen
+        if keystate(36) then currentScreen$="Joystick" `J for joystick
+        if keystate(35) then currentScreen$="Help" `H for help
+        if keystate(25) `P for Play Game
+            currentScreen$="Game"
+            `have to reset some variables everytime the game is started - Should be done at the start of the game loop?
+            currenttime# = timer()
+            score=0
+            lives=3
+            POSITION CAMERA 0,5000,-10000
+            POSITION OBJECT player, 0,5000,-10000
+            point CAMERA 0,5000,1
+            POSITION OBJECT balloon, 0, 7500, 0
+            POSITION OBJECT enemy, 0, 5000, 10000
+            for i=1 to 50
+                hide object bullets(i)
+            NEXT i
+            loop sound ufo_sound
+        endif
+        if keystate(31) then currentScreen$="Scores" `S for scores
+    endif
+    
+    
+    `Joystick Calibration Screen, gives the player information on their joystick and allows the player to calibrate it
+    if currentScreen$="Joystick" 
+        cls
+        `display information about controller
+        print "Controller Information"
+        print ""
+        print "      Control Device Name: ";CONTROL DEVICE NAME$()
+        print "        Number of Buttons: ", joystick information(0)
+        print " Force Feedback Available: ", joystick information(1)
+        print "         Z Axis Available: ", joystick information(2)
+        print "   Twist X Axis Available: ", joystick information(3)
+        print "   Twist Y Axis Available: ", joystick information(4)
+        print "   Twist Z Axis Available: ", joystick information(5)
+        print "        Number of Sliders: ", joystick information(6)
+        print "           Number of Hats: ", joystick information(7)
+        print "      Deadzone Percentage: ", joystick information(8)
+        print ""
+        print ""
+        
+        `set up variables
+        currentX#=joystick x()
+        currentY#=joystick y()
+        currentZ#=joystick z()
+        `get the max. New higher values will over write lower values
+        if maxX#<currentX# then maxX#=currentX#
+        if maxY#<currentY# then maxY#=currentY#
+        if maxZ#<currentZ# then maxZ#=currentZ#
+        
+        `directions and feedback
+        print "Please press the analog stick as far as you can in all directions to calibrate your controller."
+        print ""
+        print "joystick x: "+str$(currentX#)+"   (Max: "+str$(maxX#)+")"
+        print "joystick y: "+str$(currentY#)+"   (Max: "+str$(maxY#)+")"
+        print "joystick z: "+str$(currentZ#)+"   (Max: "+str$(maxZ#)+")"
+        print "joystick fire 1: "+str$(joystick fire x(1))
+        print ""
+        print "Press enter to continue."
+        `return to menu screen
+        if keystate(28)=1 then currentScreen$="Menu"
+    endif
+    
+    
+    `Help Display Screen, displays crucial information on how to play the game
+    if currentScreen$="Help" 
+        cls
+        print "---Help---"
+        print ""
+        print "The UFO is indestructable, but damaging it's shield will give you points"
+        print "Balloons give you a boost to your firing rate for a small time after being shot"
+        print "Flying into the gorund or the spaceship will cause you to crash"
+        print "Watch out, the spaceship can shoot you too"
+        print "Keyboard Controls: W=Pitch Down, S=Pitch Up, A=Roll Left, D=Roll Right, RShift=Speed up, LShift=Slow Down, Space=Shoot"
+        print "Joystick/Controller: X Axis=Roll Left/Right, Y Axis=Pitch Up/Down, Z Axis=Speed Up/Down, Button1=Shoot"
+        print ""
+        print "Press enter to return to the main menu."
+        if keystate(28)=1 then currentScreen$="Menu"
+    endif
+    
+    
+    
+    `High Score Screen, reads scores from a file and displays them
+    `May come from either the main menu or the game, have to take into account both cases so there may appear to be some redundancy
+    if currentScreen$="Scores" 
+        displayScores(score) `this is done in a function later on.
+        score=0
+        currentScreen$="Menu"
+    endif
+    
+    
+    
+    `The actual game
+    if currentScreen$="Game"
+        `no clear screen on this one
+        `set up the text
+        set text size 30
+        ink RGB(0,0,0),1
+        `Get/set some important variables
+        camX=CAMERA POSITION X():camY=CAMERA POSITION Y():camZ=CAMERA POSITION Z() `get the camera position
+        camrotX=CAMERA ANGLE X():camrotY=CAMERA ANGLE Y():camrotZ=CAMERA ANGLE Z() `get the camera angle
+        currentX#=joystick x():currentY#=joystick y():currentZ#=joystick z() `get the joystick position
+        show mouse `make sure the mouse is visible (it's the targeting riticle
+        POSITION MOUSE screen width()/2,screen height()/2 `Set the targeting reticle in place
+        speed#=60 `reset the speed to default, will reapply all modifiers
+        currenttime#=timer() `update the timer variable
+        templastshot=0 `reset templastshot
+        `set the firing rate depending on whether you have the power up form the balloon
+        if currenttime#<lastballoonhit+powerupduration then firerate=100
+        if currenttime#>=lastballoonhit+powerupduration then firerate=250
+        
+        `allow the player to control the camera
+        `keyboard controls
+        if KEYSTATE(17)=1 then pitch camera down 0,2
+        if KEYSTATE(31)=1 then pitch camera up 0,2
+        if KEYSTATE(30)=1 then roll camera left 0,2
+        if KEYSTATE(32)=1 then roll camera right 0,2
+        if KEYSTATE(42)=1 then inc speed#, 25 `forward thrusters
+        if KEYSTATE(54)=1 then dec speed#, 25 `backward thrusters
+        if keystate(57)=1 then templastshot=playerfire(currenttime#,lastshot,firerate);
+        `joystick controls
+        if joystick y()-minY#>0 then pitch camera up 0, 2*(abs(joystick y())/maxY#)
+        if joystick y()-minY#<0 then pitch camera down 0, 2*(abs(joystick y())/maxY#)
+        if joystick x()-minX#>0 then roll camera right 0, 2*(abs(joystick x())/maxX#)
+        if joystick x()-minX#<0 then roll camera left 0, 2*(abs(joystick x())/maxX#)
+        inc speed#, 30*(joystick z()/maxZ#) `let the player have a throttle
+        if joystick fire x(1) then templastshot=playerfire(currenttime#,lastshot,firerate); 
+        
+        `templastshot is used to determine if fire() was successful, and if it was set the new lastshot
+        if templastshot>0 then lastshot=currenttime# `I can't seem to change any global variables form within a function. TODO: Put this whole loop in a function and pass what is needed instead of relying on global variables.
+
+        `the player crashes
+        if camY<0 or object collision(player, ground) or object collision(player, enemy) 
+            `special font
+            ink RGB(255,0,0),0
+            SET TEXT SIZE 50
+            set text to bold
+            `tell them they crahsed and wait a few seconds
+            center text screen width()/2, screen height()/2, "You Crashed!"
+            sync
+            wait 2500
+            `reset
+            POSITION CAMERA 0,5000,-10000
+            POSITION OBJECT player, 0,5000,-10000
+            point CAMERA 0,5000,1
+            POSITION OBJECT balloon, 0, 7500, 0
+            POSITION OBJECT enemy, 0, 5000, 10000
+            for i=1 to 50
+                hide object bullets(i)
+            NEXT i
+            `reduce lives
+            dec lives, 1
+            `return font to normal
+            ink RGB(255,255,255),0
+            SET TEXT SIZE 30
+            set text to normal
+        endif
+        
+        `if the ship and the balloon collide, move the balloon and set ballonlasthit so the power up will be enabled      
+        if object collision(player,balloon) = 1
+            POSITION OBJECT balloon, rnd(20000)-10000, rnd(12000)+3000, rnd(20000)-10000
+            lastballoonhit=currenttime#
+        endif
+    
+        `loop through all the bullets, move them and check collisions/out of bounds
+        for i=1 to 50
+            `if the bullets are visible then do stuff, otherwise ignore them
+            if object visible(bullets(i))=1 
+                `move the bullets forward
+                move object bullets(i), bulletspeed
+                `if the bullets are out of bounds remove them
+                if (object position x(bullets(i))>25000 or object position x(bullets(i))<-25000) then hide object bullets(i)
+                if (object position y(bullets(i))>25000 or object position y(bullets(i))<0) then hide object bullets(i)
+                if (object position z(bullets(i))>25000 or object position z(bullets(i))<-25000) then hide object bullets(i)
+                `if the bullet hit the balloon
+                if object collision(bullets(i),balloon) = 1
+                    `relocate balloon
+                    POSITION OBJECT balloon, rnd(20000)-10000, rnd(6000)+3000, rnd(20000)-10000
+                    `hide the bullet
+                    hide object bullets(i)
+                    `give the player the powerup
+                    lastballoonhit=currenttime#
+                ENDIF
+                `if the bullet hits the enemy
+                if object collision(enemy, bullets(i)) 
+                    `increase their score
+                    inc score, 1
+                    `and hide the bullet
+                    hide object bullets(i)  
+                    `update when the alien was last hit
+                    alienhitat=currenttime#
+                endif    
+                `if a bullet hit the player
+                if object collision(player, bullets(i)) `assumes hit by enemy bullet
+                    `special font
+                    ink RGB(255,0,0),0
+                    SET TEXT SIZE 50
+                    set text to bold
+                    `tell them they were hit and wait a few seconds
+                    center text screen width()/2, screen height()/2, "You Were Shot Down!"
+                    sync
+                    wait 2500
+                    `reset the camera, player, enemy, balloon and hide the bullets
+                    POSITION CAMERA 0,5000,-10000
+                    POSITION OBJECT player, 0,5000,-10000
+                    point CAMERA 0,5000,1
+                    POSITION OBJECT balloon, 0, 7500, 0
+                    POSITION OBJECT enemy, 0, 5000, 10000
+                    for i2=1 to 50
+                        hide object bullets(i2)
+                    NEXT i2
+                    `reduce lives
+                    dec lives, 1
+                    `return font to normal
+                    ink RGB(255,255,255),0
+                    SET TEXT SIZE 30
+                    set text to normal
+                ENDIF
+            endif    
+        next i
+        
+        `display various information
+        text screen width()-screen width()/5, 10,  "Score: "+str$(score)
+        text screen width()-screen width()/5, 40,  "Lives: "+str$(lives)
+        set text size 50
+        if currenttime#<lastballoonhit+powerupduration then center text screen width()/2, screen height()/2,  "RAPID FIRE!"
+        set text size 30
+        center text screen width()/2, screen height()-screen height()/10, "Altitude:  "+str$(int(camY))+"   Latitude:  "+str$(int(camX+25000))+"    Longitude: "+str$(int(CamZ+25000))
+        center text screen width()/2, screen height()-screen height()/10+30, "Angle X:  "+str$(int(camrotX))+"   Angle Y:  "+str$(int(camrotY))+"    Angle Z: "+str$(int(CamrotZ))
+        center text screen width()/2, screen height()-screen height()/10+60, "Speed: "+str$(int(speed#))
+        
+        `move the camera (player) forward by their speed
+        MOVE CAMERA speed#
+        `keep the player object where the camera is
+        position object player, camera position x(), camera position y(), camera position z()
+        `run the AI controlling the enemy
+        runAI(enemy)
+        `update the sounds
+        position sound ufo_sound, object position x(enemy), object position y(enemy), object position z(enemy)
+        position listener camera position x(), camera position y(), camera position z()
+        `if the enemy was recently hit, turn it's shields red - as a by product the shields range from green to yellow to orange to red
+        POSITION PARTICLES 1, object position x(enemy), object position y(enemy), object position z(enemy)
+        if currenttime#<alienhitat+flashtime : color particles 1, 256,0,0
+        else : color particles 1, 0,256,0 : endif
+            
+        `if the game is over
+        if lives<0 or keystate(28)=1
+            `stop the ufo's continuous sound
+            stop sound ufo_sound
+            `bring up the score screen
+            currentScreen$="Scores"
+        endif
+    endif
+    
+    sync `a single sync keeps most everything displayed
+UNTIL escapekey()
+
+`finds the next available bullet and sets it up to fire
+function playerfire(time, last, rate)
+    if time<last+rate then exitfunction -1
+    BTBF=0 `bullet to be fired
+    i=1 `loop number
+    while BTBF=0 `while an unused bullet has not been found
+       if object visible(bullets(i))=1 `check the current bullet
+            inc i, 1 `if it is in use, then go to the next
+       else
+            BTBF=i `if it is unsused then set it to the bullet to be used
+       endif
+       if BTBF=0 and i=50 then exitfunction 0 `if it has reached the end of the bullets and hasn't found one to use, exit the function
+    ENDWHILE
+    position object bullets(BTBF), camera position x(), camera position y(), camera position z() `as thids is the player fire function, set the vullet to the player's postion
+    rotate object bullets(BTBF), camera angle x(), camera angle y(), camera angle z() `and orientation
+    show object bullets(BTBF) `show the bullet so it is picked up by the collision and movement code
+    position sound 1, camera position x(), camera position y(), camera position z() `set the sound to the player's position
+    play sound 1 `play the sound
+ENDFUNCTION 1
+
+`runs the AI behavior including movement and shooting
+function runAI(aiNum)
+    `ufo spin
+    yrotate object aiNum, object angle y(aiNum)+10
+    
+    `chase the player
+    if object position x(aiNum)<camera position x()-100 then x=10
+    if object position x(aiNum)>camera position x()+100 then x=-10
+    if object position y(aiNum)<camera position y()-100 then y=10
+    if object position y(aiNum)>camera position y()+100 then y=-10
+    if object position z(aiNum)<camera position z()-100 then z=10
+    if object position z(aiNum)>camera position z()+100 then z=-10
+    position object aiNum, object position x(aiNum)+x, object position y(aiNum)+y, object position z(aiNum)+z
+    
+    `fire?
+    rand=rnd(1000)
+    if rand=1 then enemyFire(aiNum)
+ENDFUNCTION
+
+`this should be combined with the player fire, but I'm lazy
+function enemyFire(firer)
+    BTBF=0 `bullet to be fired
+    i=1
+    while BTBF=0
+       if object visible(bullets(i))=1 
+            inc i, 1
+       else
+            BTBF=i
+       endif
+       if BTBF=0 and i=50 then exitfunction 0
+    ENDWHILE
+    position object bullets(BTBF), object position x(firer), object position y(firer), object position z(firer)
+    point object bullets(BTBF), camera position x(), camera position y(), camera position z()
+    show object bullets(BTBF)
+    position sound 1, object position x(firer), object position y(firer), object position z(firer)
+    play sound 1
+ENDFUNCTION 1
+
+REM This function will display the High scores and write them to a file
+Function DisplayScores(score AS INTEGER)
+    DIM HIGHSCORE(10) AS INTEGER `holds the high scores
+    for A=0 to 9 `initialize the list, not sure if this is needed in dark basic
+        HIGHSCORE(A)=0
+    NEXT A
+    DIM HIGHSCORE_NAME(10) AS STRING `holds the names of the high scorers
+    for A=0 to 9
+        HIGHSCORE_NAME(A)="TOM"
+    NEXT A
+    TempVal AS STRING `will hold the values read in form the file
+    TempName1 AS STRING `used for transfering around scores when a new highscore is made
+    TempName2 AS STRING
+    TempInt1 AS INTEGER
+    TempInt2 AS INTEGER
+    Name AS STRING `the inputed player name
+    Char as String `used to get the player's input
+    CharCode as Integer `used to get the player's input
+
+    `if the player has a score then get their player's name
+    if score>0
+        `Had to write my own input because input was acting weird
+        while CharCode<>28 `while the input character is not Enter
+            wait 75 `wait a small amount of type to prevent rapid key entrys
+            clear entry buffer `key the input buffer 
+            CharCode=Scancode() `set CharCode to the input buffer to catch any key the player inputs
+            Char=getKeyfromCode(CharCode) `get the actual character from the keycode entered
+            if (CharCode>=2 and CharCode<=11) or (CharCode>=16 and CharCode<=25) or (CharCode>=30 and CharCode<=38) or (CharCode>=44 and CharCode<=50) or Char=" " `if the character is valid
+                Name=Name+Char `add it to the name
+            endif
+            if CharCode=14 `backspace deletes the last letter in the name
+                tempname$="" `the temp to store the name
+                for i=0 to len(Name)-1 `cycle through all the letters but the last oe
+                    tempname$=tempname$+mid$(Name,i) `add the mto the temp
+                NEXT
+                Name=tempname$ `set the name to temp
+            endif
+            print "Please Enter Your Name: "+Name `display the prompt and what they wrote
+            print str$(CharCode)+" "+Char `debug
+            sync `needs to update the screen outside the program loop
+            cls
+        endwhile
+    else
+        Name="N/A" `if they don't have a score just use N/A
+    endif
+    if Name="" then Name="Anonymous" `if they don't input a name use anonymous
+
+    REM If the highscore file doesnt exist, then create it
+    exists=FILE EXIST("HighScore.txt")
+    if exists=0
+        MAKE FILE "HighScore.txt"
+    endif
+    
+    REM Open the highscores, then add each string into the HIGHSCORE srray
+    OPEN TO READ 1, "HighScore.txt"
+    for A=0 to 9
+        if FILE END(1)=1 then exit
+        READ STRING 1, TempVal
+        HIGHSCORE(A)=val(TempVal)
+        READ STRING 1, TempVal
+        HIGHSCORE_NAME(A)=TempVal
+    NEXT A
+    CLOSE FILE 1
+    
+    REM Rearrange the highscores to add the new score
+    for A=0 to 9
+        REM If the highscore list is empty then add the current score and exit from the loop.
+        if HIGHSCORE(A)=0
+            HIGHSCORE(A)=score
+            HIGHSCORE_NAME(A)=Name
+            exit
+        endif
+        REM if the current score is higher then the last score, change the array to add the current score.
+        REM then exit the loop.
+        if score>HIGHSCORE(A)
+            TempInt1=HIGHSCORE(A)
+            TempName1=HIGHSCORE_NAME(A)
+            HIGHSCORE(A)=score
+            HIGHSCORE_NAME(A)=Name
+            for B=A+1 to 9
+                TempInt2=HIGHSCORE(B)
+                HIGHSCORE(B)=TempInt1
+                TempInt1=TempInt2
+                
+                TempNAME2=HIGHSCORE_NAME(B)
+                HIGHSCORE_NAME(B)=TempName1
+                TempName1=TempName2
+                NEXT B
+            exit
+        endif
+    NEXT A
+   
+    REM Delete the old high score file.
+    DELETE FILE "HighScore.txt"
+    REM Open the new high scor5e file and add the highscores
+    OPEN TO WRITE 1, "HighScore.txt"
+    for A=0 to 9
+        WRITE STRING 1, STR$(HIGHSCORE(A))
+        WRITE STRING 1, HIGHSCORE_NAME(A)
+    NEXT A
+    CLOSE FILE 1
+   
+    REM Show the "HIGH SCORES" Page
+    SET TEXT SIZE 20
+    SET TEXT TO BOLD
+   
+    wait 250 `give them some time to stop holding down enter...
+    SET KEY STATE TOGGLE 28, 0 `make the enter key set to off so it doesn't blow through this check due to the input name
+    repeat
+        for A=0 to 9
+            CENTER TEXT 320, 0, "HIGH SCORES"
+            TEXT 200, (A*30)+40, STR$(A+1)+". "+STR$(HIGHSCORE(A))
+            TEXT 400, (A*30)+40, " - "+HIGHSCORE_NAME(A)
+        NEXT A
+        sync
+        cls
+    until returnkey()=1
+ENDFUNCTION
+
+`Could not find a built in function to do this...
+`take a scacode and turn it into a character
+function getKeyfromCode(code)
+    return$=""
+    SELECT code
+    `numbers
+    CASE 2 : return$="1" : ENDCASE
+    CASE 3 : return$="2" : ENDCASE
+    CASE 4 : return$="3" : ENDCASE
+    CASE 5 : return$="4" : ENDCASE
+    CASE 6 : return$="5" : ENDCASE
+    CASE 7 : return$="6" : ENDCASE
+    CASE 8 : return$="7" : ENDCASE
+    CASE 9 : return$="8" : ENDCASE
+    CASE 10 : return$="9" : ENDCASE
+    CASE 11 : return$="0" : ENDCASE
+    `first row
+    CASE 16 : return$="q" : ENDCASE
+    CASE 17 : return$="w" : ENDCASE
+    CASE 18 : return$="e" : ENDCASE
+    CASE 19 : return$="r" : ENDCASE
+    CASE 20 : return$="t" : ENDCASE
+    CASE 21 : return$="y" : ENDCASE
+    CASE 22 : return$="u" : ENDCASE
+    CASE 23 : return$="i" : ENDCASE
+    CASE 24 : return$="o" : ENDCASE
+    CASE 25 : return$="p" : ENDCASE
+    `second row
+    CASE 30 : return$="a" : ENDCASE
+    CASE 31 : return$="s" : ENDCASE
+    CASE 32 : return$="d" : ENDCASE
+    CASE 33 : return$="f" : ENDCASE
+    CASE 34 : return$="g" : ENDCASE
+    CASE 35 : return$="h" : ENDCASE
+    CASE 36 : return$="j" : ENDCASE
+    CASE 37 : return$="k" : ENDCASE
+    CASE 38 : return$="l" : ENDCASE
+    `Third row
+    CASE 44 : return$="z" : ENDCASE
+    CASE 45 : return$="x" : ENDCASE
+    CASE 46 : return$="c" : ENDCASE
+    CASE 47 : return$="v" : ENDCASE
+    CASE 48 : return$="b" : ENDCASE
+    CASE 49 : return$="n" : ENDCASE
+    CASE 50 : return$="m" : ENDCASE
+    `Misc Keys
+    CASE 57 : return$=" " : ENDCASE
+    ENDSELECT
+ENDFUNCTION return$
